@@ -66,4 +66,4 @@ for imagePath in list(list_files(IMG_PATH)):
 # Video demo
 # ----------------------------------------------------------------------
 
-print("\nDemonstrate face recognition in a video in \n{}\n".format(VIDEO_PATH))
+# print("\nDemonstrate face recognition in a video in \n{}\n".format(VIDEO_PATH))
