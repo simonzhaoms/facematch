@@ -1,7 +1,6 @@
 print("Loading the required Python modules ...")
-import glob
+
 import os
-import pickle
 
 from utils import (
     convert_cv2matplot,
@@ -13,7 +12,6 @@ from utils import (
     plot_side_by_side_comparison,
     read_cv_image_from,
     recognise_face,
-    save_data,
 )
 
 

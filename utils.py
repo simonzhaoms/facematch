@@ -1,7 +1,6 @@
 import argparse
 import cv2 as cv
 import face_recognition
-import glob
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import numpy as np
@@ -30,6 +29,7 @@ FACE_MODEL = 'hog'
 FaceParams = namedtuple('FaceParams', 'scaleFactor minNeighbors minSize')
 FACEPARAMS = FaceParams(1.2, 5, 30)  # Default face detection parameters
 
+
 # ----------------------------------------------------------------------
 # File, folder, and I/O
 # ----------------------------------------------------------------------
@@ -45,23 +45,25 @@ def get_abspath(path):
 
     path = os.path.expanduser(path)
     if not os.path.isabs(path):
-        CMD_CWD = mlutils.get_cmd_cwd()
-        path = os.path.join(CMD_CWD, path)
+        path = os.path.join(mlutils.get_cmd_cwd(), path)
 
     return os.path.abspath(path)
 
 
 def list_files(path, depth=0):
-    """List all files in <path> at level <depth>."""
+    """List all files in <path> at level <depth>.  If depth < 0, list all files under <path>."""
 
     path = os.path.join(path, '')
     start = len(path)
     for (root, dirs, files) in os.walk(path):
-        segs = root[start:].split(os.path.sep)
-        length = len(segs)
-        if (depth == 0 and segs[0] == '') or (depth > 0 and length == depth):
+        if depth < 0:
             for file in files:
                 yield os.path.join(root, file)
+        else:
+            segs = root[start:].split(os.path.sep)
+            if (depth == 0 and segs[0] == '') or len(segs) == depth:
+                for file in files:
+                    yield os.path.join(root, file)
 
 
 def load_data(path):
@@ -261,7 +263,8 @@ def mark_face(image, face, text):
 
     Args:
         image: An OpenCV BGR image.
-        face: A face cooridinate tuple (top, right, bottom, left)
+        face: A face cooridinate tuple (top, right, bottom, left).
+        text: Text would be displayed above the face box.
     """
 
     # Draw a rectangle around the faces
