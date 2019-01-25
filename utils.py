@@ -1,6 +1,7 @@
 import argparse
 import cv2 as cv
 import face_recognition
+import json
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import numpy as np
@@ -8,7 +9,9 @@ import os
 import pickle
 import re
 import toolz
-import urllib
+import urllib.parse
+import urllib.request
+import uuid
 
 from collections import Counter
 from collections import namedtuple
@@ -25,9 +28,11 @@ TEXT_WIDTH = 2
 TEXT_FONT = cv.FONT_HERSHEY_SIMPLEX
 TEXT_SIZE = 0.75
 
-FACE_MODEL = 'hog'
-FaceParams = namedtuple('FaceParams', 'scaleFactor minNeighbors minSize')
-FACEPARAMS = FaceParams(1.2, 5, 30)  # Default face detection parameters
+FaceParams = namedtuple('FaceParams', 'model count')
+FACEPARAMS = FaceParams('hog', 10)  # Default face detection parameters
+
+BING_IMG_SEARCH_PAGE_COUNT = 50
+BING_IMG_SEARCH_ENDPOINT = 'https://api.cognitive.microsoft.com/bing/v7.0/images/search'
 
 
 # ----------------------------------------------------------------------
@@ -76,6 +81,18 @@ def load_data(path):
 def save_data(data, path):
     with open(path, 'wb') as file:
         pickle.dump(data, file)
+
+
+def download_img(url, folder, prefix):
+    path = os.path.join(folder, get_unique_name(prefix))
+    urllib.request.urlretrieve(url, path)
+    return path
+
+
+def get_unique_name(prefix):
+    prefix = '_'.join(prefix.split())
+    number = str(uuid.uuid4().hex)
+    return prefix + '_' + number
 
 
 # ----------------------------------------------------------------------
@@ -163,33 +180,41 @@ def plot_side_by_side_comparison(
     plt.show()
 
 
+def show_image(url):
+    img = read_cv_image_from(url)
+    img = convert_cv2matplot(img)
+    display(img)
+    return img
+
+
+def display(img):
+    plt.axis('off')
+    plt.imshow(img)
+    plt.show()
+
+
 # ----------------------------------------------------------------------
 # Command line argument parser
 # ----------------------------------------------------------------------
 
 option_parser = argparse.ArgumentParser(add_help=False)
 option_parser.add_argument(
-    '--scaleFactor',
-    type=float,
-    default=FACEPARAMS.scaleFactor,
-    help='scale factor ({} by default, must > 1)'.format(FACEPARAMS.scaleFactor))
+    '--model',
+    type=str,
+    default=FACEPARAMS.model,
+    help='face recognition model ({} by default)'.format(FACEPARAMS.model))
 option_parser.add_argument(
-    '--minNeighbors',
+    '--count',
     type=int,
-    default=FACEPARAMS.minNeighbors,
-    help='minimum neighbors ({} by default, integer, must > 1)'.format(FACEPARAMS.minNeighbors))
-option_parser.add_argument(
-    '--minSize',
-    type=int,
-    default=FACEPARAMS.minSize,
-    help='minimum size ({} by default, integer, must > 1)'.format(FACEPARAMS.minSize))
+    default=FACEPARAMS.count,
+    help='number of images for training ({} by default, integer, must > 0)'.format(FACEPARAMS.count))
 
 
 # ----------------------------------------------------------------------
 # Face recognition
 # ----------------------------------------------------------------------
 
-def detect_faces(rgb, model=FACE_MODEL):
+def detect_faces(rgb, model=FACEPARAMS.model):
     """Detect all faces in <rgb> using the <model>.
 
     Args:
@@ -236,24 +261,38 @@ matches.
     return face_recognition.compare_faces(candidate_encodings, encoding)
 
 
-def recognise_face(encoding, candidate_encodings, candidate_names):
+def flatten_encodings(data):
+    encoding_list = []
+    name_list = []
+    for name, encodings in data.items():
+        encoding_list += encodings
+        for i in range(len(encodings)):
+            name_list.append(name)
+
+    cnt_dict = Counter(name_list)
+
+    return encoding_list, name_list, cnt_dict
+
+
+def recognise_face(encoding, encoding_list, name_list, cnt_dict):
     """Recognise specific face <encoding> compared with <candidate_data>.
 
     Args:
         encoding: a specific face encoding to be recoginised.
-        candidate_encodings (list): List of known candidate face encodings.
-        candidate_names (list): List of known candidate face names.
+        encoding_list: List of known candidate face encodings.
+        name_list (list): List of known candidate face names.
+        cnt_dict (dict): Number of encodings for each name in <name_list>.
 
     Returns:
         The best matched name of <encoding>.
     """
 
-    matches = _match_face(encoding, candidate_encodings)
+    matches = _match_face(encoding, encoding_list)
 
     if True in matches:
-        names = [name for (name, match) in zip(candidate_names, matches) if match]
+        names = [name for (name, match) in zip(name_list, matches) if match]
         cnt = Counter(names)
-        return max(cnt, key=cnt.get)
+        return max(cnt, key=lambda name: cnt[name]/cnt_dict[name])
     else:
         return None
 
@@ -276,7 +315,7 @@ def mark_face(image, face, text):
 
 
 # ----------------------------------------------------------------------
-# Constants
+# URL
 # ----------------------------------------------------------------------
 
 def is_url(url):
@@ -294,3 +333,25 @@ def is_url(url):
         return True
     else:
         return False
+
+
+# ----------------------------------------------------------------------
+# Bing image search
+# ----------------------------------------------------------------------
+
+def search_images(term, key, offset=0):
+    headers = {"Ocp-Apim-Subscription-Key": key}
+    params = urllib.parse.urlencode({
+        "q": term,
+        "offset": offset,
+        "count": BING_IMG_SEARCH_PAGE_COUNT,
+    })
+    url = BING_IMG_SEARCH_ENDPOINT + '?' + params
+    request = urllib.request.Request(url, headers=headers)
+    search_results = json.loads(urllib.request.urlopen(request).read())
+    total_img_num = search_results["totalEstimatedMatches"]
+    img_urls = []
+    for v in search_results["value"]:
+        img_urls.append(v["contentUrl"])
+
+    return img_urls, total_img_num

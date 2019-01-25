@@ -27,3 +27,4 @@ dependencies:
     - images/
 commands:
   demo: Demostrate face recognition on sample images.
+  score: Recognise a given person on images.

@@ -2,6 +2,7 @@ print("Loading the required Python modules ...")
 
 import os
 
+from collections import Counter
 from utils import (
     convert_cv2matplot,
     detect_faces,
@@ -29,6 +30,7 @@ ENCODE_PATH = os.path.join(cwd, 'encodings/demo/encodings.pickle')
 data = load_data(ENCODE_PATH)
 candidate_encodings = data['encodings']
 candidate_names = data['names']
+cnt_dict = Counter(candidate_names)
 
 
 # ----------------------------------------------------------------------
@@ -43,7 +45,7 @@ for imagePath in list(list_files(IMG_PATH)):
     image = read_cv_image_from(imagePath)
     result = image.copy()
     rgb = convert_cv2matplot(image)
-    print("    Detecting faces in the image...")
+    print("    Detecting faces in the image ...")
     boxes = detect_faces(rgb)
     cnt = len(boxes)
     print("        {} face{} found!".format(cnt, 's' if cnt > 1 else ''))
@@ -51,7 +53,7 @@ for imagePath in list(list_files(IMG_PATH)):
     encodings = encode_faces(boxes, rgb)
     print("    Comparing found faces with known faces ...")
     for (box, encoding) in zip(boxes, encodings):
-        name = recognise_face(encoding, candidate_encodings, candidate_names)
+        name = recognise_face(encoding, candidate_encodings, candidate_names, cnt_dict)
         if name is not None:
             mark_face(result, box, name)
 
