@@ -22,6 +22,7 @@ dependencies:
   files:
     - demo.py
     - utils.py
+    - score.py
     - README.md
     - encodings/
     - images/
