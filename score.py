@@ -76,7 +76,8 @@ if os.path.exists(ENCODE_FILE):
 # Get a person's name to be searched
 # ----------------------------------------------------------------------
 
-name = input("\nPlease give a person's name whose photos can be found on the Internet:\n> ")
+msg = "\nPlease give a person's name whose photos can be found on the Internet:\n(For example, Satya)\n> "
+name = input(msg)
 
 img_dir = os.path.join(IMG_PATH, '_'.join(name.split()))
 os.makedirs(img_dir, exist_ok=True)
@@ -92,7 +93,7 @@ To search photos of '{0}', Bing image search API is used:
 
     https://azure.microsoft.com/en-us/services/cognitive-services/bing-image-search-api/
 
-And a Bing search API subscription key is needed.  a 30-days free trail Azure
+And a Bing search API subscription key is needed.  A 30-days free trail Azure
 account can be created at:
 
     https://azure.microsoft.com/en-us/try/cognitive-services/?api=search-api-v7
@@ -189,44 +190,53 @@ Or type in a search term to ask Bing to find a photo for you.
 Or Ctrl-c to quit.
 """
 print(msg.format(name))
-url = ''
-while url == '':
+urls = ''
+while urls == '' or urls == []:
     yes = mlutils.yes_or_no("Do you want to use Bing to search a photo for you", yes=True)
     if not yes:
-        url = input("Then please type in path or URL of the photo:\n> ")
+        urls = input("Then please type in path or URL of the photo:\n> ")
     else:
-        term = input("Please type in a search term to ask Bing to find a photo for you:\n> ")
-        _, total = search_images(term, key)
+        msg = "Please type in a search term to ask Bing to find a photo for you:\n(For example, satya and bill gates)\n> "
+        term = input(msg)
 
         img_dir = os.path.join(img_dir, '_'.join(term.split()))
         os.makedirs(img_dir, exist_ok=True)
 
-        for offset in range(0, total, BING_IMG_SEARCH_PAGE_COUNT):
-            image_urls, _ = search_images(term, key, offset=offset)
-            for url in image_urls:
-                try:
-                    path = download_img(url, img_dir, term)
-                except urllib.error.HTTPError:
-                    continue
+        urls, _ = search_images(term, key)
 
-                rgb = show_image(path)
-                yes = mlutils.yes_or_no("\n    Do you want to use this photo", yes=True)
-                if not yes:
-                    os.remove(path)
-                    continue
+        for url in urls:
+            try:
+                path = download_img(url, img_dir, term)
+            except urllib.error.HTTPError:
+                continue
 
-                print("        Detecting faces in the image ...")
-                boxes = detect_faces(rgb)
-                cnt = len(boxes)
-                print("            {} face{} found!".format(cnt, 's' if cnt > 1 else ''))
-                print("        Calculating the face encodings ...")
-                encodings = encode_faces(boxes, rgb)
-                print("        Comparing found faces with known faces ...")
-                for (box, encoding) in zip(boxes, encodings):
-                    found_name = recognise_face(encoding, candidate_encodings, candidate_names, cnt_dict)
-                    if found_name is not None:
-                        mark_face(rgb, box, found_name)
-                        display(rgb)
-                    else:
-                        msg = "            No '{}' or other known persons are found in the image!"
-                        print(msg.format(name))
+            rgb = show_image(path)
+            yes = mlutils.yes_or_no("\n    Do you want to use this photo", yes=True)
+            if not yes:
+                os.remove(path)
+                continue
+
+            print("        Detecting faces in the image ...")
+            boxes = detect_faces(rgb)
+            cnt = len(boxes)
+            print("            {} face{} found!".format(cnt, 's' if cnt > 1 else ''))
+            print("        Calculating the face encodings ...")
+            encodings = encode_faces(boxes, rgb)
+            print("        Comparing found faces with known faces ...")
+            found = False
+            for (box, encoding) in zip(boxes, encodings):
+                found_name = recognise_face(encoding, candidate_encodings, candidate_names, cnt_dict)
+                if found_name is not None:
+                    if found_name == name:
+                        found = True
+                    mark_face(rgb, box, found_name)
+                    print("            '{}' is found in the image!".format(found_name))
+
+            if not found:
+                print("            No '{}' are found in the image!".format(name))
+
+            display(rgb)
+
+            yes = mlutils.yes_or_no("\n    Do you want to continue searching for '{}'", name, yes=True)
+            if not yes:
+                break
