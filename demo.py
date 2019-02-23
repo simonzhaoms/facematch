@@ -12,7 +12,7 @@ from utils import (
     mark_face,
     plot_side_by_side_comparison,
     read_cv_image_from,
-    recognise_face,
+    match_face,
 )
 
 
@@ -53,7 +53,7 @@ for imagePath in list(list_files(IMG_PATH)):
     encodings = encode_faces(boxes, rgb)
     print("    Comparing found faces with known faces ...")
     for (box, encoding) in zip(boxes, encodings):
-        name = recognise_face(encoding, candidate_encodings, candidate_names, cnt_dict)
+        name = match_face(encoding, candidate_encodings, candidate_names, cnt_dict)
         if name is not None:
             mark_face(result, box, name)
 

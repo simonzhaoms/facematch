@@ -1,32 +1,27 @@
 print("Loading the required Python modules ...")
 
 import argparse
-import getpass
 import os
-import readline  # For prompt of input() to take effect
+import readline  # Don't remove !! For prompt of input() to take effect
 import urllib.error
 
 from mlhub import utils as mlutils
 from utils import (
-    BING_IMG_SEARCH_PAGE_COUNT,
-    FaceParams,
-    convert_cv2matplot,
-    detect_faces,
-    display,
+    ask_for_input,
+    check_key,
     download_img,
-    encode_faces,
-    flatten_encodings,
-    list_files,
+    get_url_path_list,
+    interact_get_match_photos,
+    interact_search_for,
+    analyse_face_features,
+    is_url,
     load_data,
-    mark_face,
+    make_name_dir,
     option_parser,
-    read_cv_image_from,
-    recognise_face,
-    save_data,
-    search_images,
+    recognise_faces,
     show_image,
+    stop,
 )
-
 
 # ----------------------------------------------------------------------
 # Parse command line arguments
@@ -37,16 +32,7 @@ parser = argparse.ArgumentParser(
     parents=[option_parser],
     description='Recognise known faces in an image.'
 )
-
 args = parser.parse_args()
-
-# Wrap face detection parameters.
-
-face_params = FaceParams(
-    args.model,
-    args.count,
-)
-
 
 # ----------------------------------------------------------------------
 # Setup
@@ -57,186 +43,123 @@ cwd = os.getcwd()
 IMG_PATH = os.path.join(cwd, 'images/score')
 os.makedirs(IMG_PATH, exist_ok=True)
 
+SINGLE_FACE_IMG_PATH = os.path.join(IMG_PATH, 'singleface')
+os.makedirs(SINGLE_FACE_IMG_PATH, exist_ok=True)
+
+MATCH_FACE_IMG_PATH = os.path.join(IMG_PATH, 'matchface')
+os.makedirs(MATCH_FACE_IMG_PATH, exist_ok=True)
+
 VIDEO_PATH = os.path.join(cwd, 'videos/score')
 os.makedirs(VIDEO_PATH, exist_ok=True)
 
 ENCODE_PATH = os.path.join(cwd, 'encodings/score')
 os.makedirs(ENCODE_PATH, exist_ok=True)
-
 ENCODE_FILE = os.path.join(ENCODE_PATH, 'encodings.pickle')
 
-# Load known faces meta data if available
+KEY_PATH = os.path.join(cwd, 'keys/score')
+os.makedirs(KEY_PATH, exist_ok=True)
+KEY_FILE = os.path.join(KEY_PATH, 'key.txt')
+
+TEMP_PATH = os.path.join(cwd, 'temp/score')
+os.makedirs(TEMP_PATH, exist_ok=True)
 
 data = {}
-if os.path.exists(ENCODE_FILE):
+if os.path.exists(ENCODE_FILE):  # Load known faces data if available
     data = load_data(ENCODE_FILE)
 
-
 # ----------------------------------------------------------------------
-# Get a person's name to be searched
-# ----------------------------------------------------------------------
-
-msg = "\nPlease give a person's name whose photos can be found on the Internet:\n(For example, Satya)\n> "
-name = input(msg)
-
-img_dir = os.path.join(IMG_PATH, '_'.join(name.split()))
-os.makedirs(img_dir, exist_ok=True)
-
-
-# ----------------------------------------------------------------------
-# Get Bing search API subscription key
+# Determine the person's name to match
 # ----------------------------------------------------------------------
 
-msg = """
-To recognise '{0}' in arbitrary photos, sample photos of '{0}' are needed.
-To search photos of '{0}', Bing image search API is used:
-
-    https://azure.microsoft.com/en-us/services/cognitive-services/bing-image-search-api/
-
-And a Bing search API subscription key is needed.  A 30-days free trail Azure
-account can be created at:
-
-    https://azure.microsoft.com/en-us/try/cognitive-services/?api=search-api-v7
-"""
-print(msg.format(name))
-
-key = None
-while key is None:
-    key = getpass.getpass(
-        "Then please paste the key below:\n(Don't worry! Your key won't be kept after this task!)\n> ")
-    try:
-        _, total = search_images(name, key)
-    except urllib.error.HTTPError:
-        key = None
-
-
-# ----------------------------------------------------------------------
-# Search photos of the person
-# ----------------------------------------------------------------------
-
-msg = """
-Now photos of '{0}' will be searched by Bing on the Internet.  Found Photos
-will be shown one-by-one, you may need to help choosing {1} photos in which
-'{0}' is the only person in order to set up a face database of him/her.
-
-Please close each window (Ctrl-w) to proceed.
-"""
-print(msg.format(name, face_params.count))
-
-count = 0
-for offset in range(0, total, BING_IMG_SEARCH_PAGE_COUNT):
-    if count == face_params.count:
-        break
-
-    image_urls, _ = search_images(name, key, offset=offset)
-    for url in image_urls:
-        try:
-            msg = "\n    [{}/{}]  Downloading the photo from\n               {}"
-            print(msg.format(str(count + 1).zfill(2), face_params.count, url))
-            path = download_img(url, img_dir, name)
-        except urllib.error.HTTPError:
-            continue
-
-        image = show_image(path)
-        yes = mlutils.yes_or_no("             Is '{}' the only person in the photo", name, yes=True)
-        if yes:
-            print("             The photo is saved as\n               {}".format(path))
-            count += 1
-            if count == face_params.count:
-                break
-        else:
-            os.remove(path)
-
-
-# ----------------------------------------------------------------------
-# Update face database for the person
-# ----------------------------------------------------------------------
-
-print("\n\nGenerating the face database for '{}'".format(name))
-
-for imagePath in list(list_files(img_dir)):
-    print("\n    Detecting faces in the photo:\n      {}".format(imagePath))
-    image = read_cv_image_from(imagePath)
-    result = image.copy()
-    rgb = convert_cv2matplot(image)
-    boxes = detect_faces(rgb)
-    cnt = len(boxes)
-    if cnt != 1:
-        print("        There are more than one face found!  This photo can not be used.")
-        continue
-
-    print("    Calculating the face encodings ...")
-    encodings = encode_faces(boxes, rgb)
-    if name in data:
-        data[name] += encodings
+use_database = False
+name = None
+if args.name is not None:  # Use the name provided
+    name = args.name
+else:  # No name provided
+    if data != {}:  # Recognise faces of known persons in database
+        use_database = True
+        name = None
     else:
-        data[name] = encodings
+        if args.batch:  # Stop if in batch mode
+            stop("No name provided!")
 
-print("\nSaving database ...")
-save_data(data, ENCODE_FILE)
-candidate_encodings, candidate_names, cnt_dict = flatten_encodings(data)
+        name = ask_for_input("\nPlease give a person's name to recognise (For example, Satya)")
 
+# ----------------------------------------------------------------------
+# Generate face database or load existing one
+# ----------------------------------------------------------------------
+
+if not use_database and name in data and args.data is None:  # Face data is available for the name
+    if args.batch:
+        use_database = True
+    else:  # Ask whether or not to use available face data if face database exists
+        msg = ("\nYou have searched '{0}' before! So there are face data for '{0}'."
+               "\nWould you like to use the data")
+        use_database = mlutils.yes_or_no(msg, name, yes=True)
+
+key_file = None
+img_download_path = None
+
+if not use_database:  # Face data needs to be obtained from other source instead of existing database
+    if args.data is None:  # Search for photos interactively
+        print("\nTo recognise '{0}' in arbitrary photos, sample photos of '{0}' are needed.\n".format(name))
+        img_urls, _ = check_key(KEY_FILE, args.key, name)  # Get Bing search subscription API key
+        key_file = KEY_FILE
+        img_download_path = make_name_dir(SINGLE_FACE_IMG_PATH, name)
+        interact_search_for(name, args.count, KEY_FILE, img_download_path, img_urls=img_urls)
+        hasdigestag = True
+    else:  # Use provided photos
+        img_download_path = args.data
+        hasdigestag = False
+
+    analyse_face_features(name, img_download_path, data, args.model, ENCODE_FILE, hasdigestag)
+    msg = "\nNow the face characteristics are remembered!\n"
+else:  # Use existing face database for face matching
+    if name is not None and name not in data:  # Face data is not available
+        stop("{}'s face information is not available!".format(name))
+
+    msg = "\nNow the face database are loaded!\n"
+
+print(msg)
 
 # ----------------------------------------------------------------------
 # Recognise the person in a given photo
 # ----------------------------------------------------------------------
 
-msg = """
-Now the face characteristics are remembered!
-'{0}' can be found in arbitrary photos.
+img_download_path = TEMP_PATH
+term = args.term
+if key_file is None:
+    key_file = args.key
 
-Please type in a path or URL of a photo to see if '{0}' is there.
-Or type in a search term to ask Bing to find a photo for you.
-Or Ctrl-c to quit.
-"""
-print(msg.format(name))
-urls = ''
-while urls == '' or urls == []:
-    yes = mlutils.yes_or_no("Do you want to use Bing to search a photo for you", yes=True)
-    if not yes:
-        urls = input("Then please type in path or URL of the photo:\n> ")
+if args.match is not None:  # Use given photos to do face matching
+    urls = get_url_path_list(args.match)
+else:  # Search for photos
+    if args.batch:
+        stop("No photos provided!")
+
+    urls, term, img_download_path = interact_get_match_photos(term, MATCH_FACE_IMG_PATH, KEY_FILE, key_file)
+
+for url in urls:
+    if is_url(url):
+        try:
+            path, _ = download_img(url, img_download_path, term)
+        except (ConnectionResetError, urllib.error.URLError):
+            continue
     else:
-        msg = "Please type in a search term to ask Bing to find a photo for you:\n(For example, satya and bill gates)\n> "
-        term = input(msg)
+        path = url
 
-        img_dir = os.path.join(img_dir, '_'.join(term.split()))
-        os.makedirs(img_dir, exist_ok=True)
+    if not args.batch:
+        rgb = show_image(path)
+        yes = mlutils.yes_or_no("\n    Do you want to use this photo", yes=True)
+        if not yes:
+            os.remove(path)
+            continue
+    else:
+        rgb = show_image(path, show=False)
 
-        urls, _ = search_images(term, key)
+    recognise_faces(rgb, data, name)
 
-        for url in urls:
-            try:
-                path = download_img(url, img_dir, term)
-            except urllib.error.HTTPError:
-                continue
-
-            rgb = show_image(path)
-            yes = mlutils.yes_or_no("\n    Do you want to use this photo", yes=True)
-            if not yes:
-                os.remove(path)
-                continue
-
-            print("        Detecting faces in the image ...")
-            boxes = detect_faces(rgb)
-            cnt = len(boxes)
-            print("            {} face{} found!".format(cnt, 's' if cnt > 1 else ''))
-            print("        Calculating the face encodings ...")
-            encodings = encode_faces(boxes, rgb)
-            print("        Comparing found faces with known faces ...")
-            found = False
-            for (box, encoding) in zip(boxes, encodings):
-                found_name = recognise_face(encoding, candidate_encodings, candidate_names, cnt_dict)
-                if found_name is not None:
-                    if found_name == name:
-                        found = True
-                    mark_face(rgb, box, found_name)
-                    print("            '{}' is found in the image!".format(found_name))
-
-            if not found:
-                print("            No '{}' are found in the image!".format(name))
-
-            display(rgb)
-
-            yes = mlutils.yes_or_no("\n    Do you want to continue searching for '{}'", name, yes=True)
-            if not yes:
-                break
+    if not args.batch:
+        yes = mlutils.yes_or_no("\n    Do you want to continue recognising '{}'", name, yes=True)
+        if not yes:
+            break
