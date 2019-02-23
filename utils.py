@@ -484,20 +484,20 @@ def analyse_face_features(name, img_dir_path, data, model, encode_file, hasdiges
         boxes = detect_faces(rgb, model)
         cnt = len(boxes)
         if cnt != 1:
-            print("        There are more than one face found!  This photo can not be used.")
+            print("    There are more than one face found!  This photo can not be used.")
             continue
 
         print("    Calculating the face encodings ...")
         encodings = encode_faces(boxes, rgb)
         update_face_database(data, name, digest, encodings)
 
-        print("\nSaving database ...")
-        save_data(data, encode_file)
+    print("\nSaving database ...")
+    save_data(data, encode_file)
 
 
 def recognise_faces(rgb, data, name):
     candidate_encodings, candidate_names, cnt_dict = flatten_encodings(data)
-    print("        Detecting faces in the image ...")
+    print("\n        Detecting faces in the image ...")
     boxes = detect_faces(rgb)
     cnt = len(boxes)
     print("            {} face{} found!".format(cnt, 's' if cnt > 1 else ''))
@@ -579,17 +579,17 @@ def check_key(default_key_file, key_file=None, search_term='cat'):
 
         if not os.path.exists(default_key_file):
             msg = """
-To search photos, Bing image search API is used:
+    To search photos, Bing image search API is used:
 
-    https://azure.microsoft.com/en-us/services/cognitive-services/bing-image-search-api/
+        https://azure.microsoft.com/en-us/services/cognitive-services/bing-image-search-api/
 
-And a Bing search API subscription key is needed.
+    And a Bing search API subscription key is needed.
 
-A 30-days free trail Azure account can be created at:
+    A 30-days free trail Azure account can be created at:
 
-    https://azure.microsoft.com/en-us/try/cognitive-services/?api=search-api-v7
+        https://azure.microsoft.com/en-us/try/cognitive-services/?api=search-api-v7
 
-You can try it and obtain the key.
+    You can try it and obtain the key.
 """
             print(msg)
         else:
@@ -616,7 +616,7 @@ You can try it and obtain the key.
             key = None
 
     if key is None:
-        msg = "Please paste the key below (Your key will be kept in '{}'):".format(default_key_file)
+        msg = "Please paste the key below (Your key will be kept in\n'{}'):".format(default_key_file)
         print(msg)
         msg = "> "
         while key is None:
@@ -646,7 +646,7 @@ def interact_search_for(name, number, key_file, img_dir_path, img_urls=None):
     count = 0
     for url in img_urls:
         try:
-            msg = "\n    [{}/{}]  Downloading the photo from\n               {}"
+            msg = "\n    [{}/{}]  Downloading the photo from\n                 {}"
             print(msg.format(str(count + 1).zfill(2), number, url))
             path, _ = download_img(url, img_dir_path, name)
         except (ConnectionResetError, urllib.error.URLError):
@@ -656,7 +656,7 @@ def interact_search_for(name, number, key_file, img_dir_path, img_urls=None):
         show_image(path)
         yes = mlutils.yes_or_no("             Is '{}' the only face in the photo or do you want to use it", name, yes=True)
         if yes:
-            print("             The photo is saved as\n               {}".format(path))
+            print("             The photo is saved as\n                 {}".format(path))
             count += 1
             if count == number:
                 break
@@ -671,14 +671,14 @@ def interact_get_match_photos(term, img_download_path, default_key_file, key_fil
         img_download_path = os.path.join(img_download_path, '_'.join(term.split()))
         os.makedirs(img_download_path, exist_ok=True)
     else:
-        msg  = "\nPlease type in a path or URL of a photo for face recognition."
-        msg += "\nOr type in a search term to ask Bing to find a photo for you."
-        msg += "\nOr Ctrl-c to quit.\n"
+        msg  = "\n    Please type in a path or URL of a photo for face recognition."
+        msg += "\n    Or type in a search term to ask Bing to find a photo for you."
+        msg += "\n    Or Ctrl-c to quit.\n"
         print(msg)
         yes = mlutils.yes_or_no("Would you like to use Bing to search a photo for you", yes=True)
         if yes:
             msg = ("\nPlease type in a search term to ask Bing to find a photo for you:"
-                   "\n(For example, satya and bill gates)")
+                   "\n(For example, Satya and Bill Gates)")
             term = ask_for_input(msg)
             urls, _ = check_key(default_key_file, key_file, term)
             img_download_path = os.path.join(img_download_path, '_'.join(term.split()))

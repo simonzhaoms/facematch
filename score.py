@@ -102,7 +102,7 @@ img_download_path = None
 
 if not use_database:  # Face data needs to be obtained from other source instead of existing database
     if args.data is None:  # Search for photos interactively
-        print("\nTo recognise '{0}' in arbitrary photos, sample photos of '{0}' are needed.\n".format(name))
+        print("\n    To recognise '{0}' in arbitrary photos, sample photos of '{0}'\n    are needed.".format(name))
         img_urls, _ = check_key(KEY_FILE, args.key, name)  # Get Bing search subscription API key
         key_file = KEY_FILE
         img_download_path = make_name_dir(SINGLE_FACE_IMG_PATH, name)
@@ -113,12 +113,12 @@ if not use_database:  # Face data needs to be obtained from other source instead
         hasdigestag = False
 
     analyse_face_features(name, img_download_path, data, args.model, ENCODE_FILE, hasdigestag)
-    msg = "\nNow the face characteristics are remembered!\n"
+    msg = "\n    Now the face characteristics are remembered!"
 else:  # Use existing face database for face matching
     if name is not None and name not in data:  # Face data is not available
         stop("{}'s face information is not available!".format(name))
 
-    msg = "\nNow the face database are loaded!\n"
+    msg = "\n    Now the face database are loaded!"
 
 print(msg)
 
@@ -142,7 +142,9 @@ else:  # Search for photos
 for url in urls:
     if is_url(url):
         try:
+            print("\n        Downloading the photo from\n            {}".format(url))
             path, _ = download_img(url, img_download_path, term)
+            print("        into\n            {}".format(path))
         except (ConnectionResetError, urllib.error.URLError):
             continue
     else:
@@ -160,6 +162,6 @@ for url in urls:
     recognise_faces(rgb, data, name)
 
     if not args.batch:
-        yes = mlutils.yes_or_no("\n    Do you want to continue recognising '{}'", name, yes=True)
+        yes = mlutils.yes_or_no("\n    Do you want to continue searching for '{}'", term, yes=True)
         if not yes:
             break
