@@ -12,6 +12,7 @@ import pickle
 import re
 import readline  # Don't remove !! For prompt of input() to take effect
 import sys
+import time
 import toolz
 import urllib.error
 import urllib.parse
@@ -20,6 +21,8 @@ import uuid
 
 from collections import Counter
 from mlhub import utils as mlutils
+from queue import Queue
+from threading import Thread
 
 # ----------------------------------------------------------------------
 # Constants
@@ -33,7 +36,7 @@ TEXT_FONT = cv.FONT_HERSHEY_SIMPLEX
 TEXT_SIZE = 0.75
 
 FACE_MODEL = 'hog'  # face detection model
-FACE_COUNT = 10     # number of photos for creating the database of the same person
+FACE_COUNT = 5      # number of photos for creating the database of the same person
 
 # The number of images to return in Bing image search response.  Maximum value for a page is 150.
 # See https://docs.microsoft.com/en-sg/rest/api/cognitiveservices/bing-images-api-v7-reference
@@ -118,15 +121,10 @@ def download_img(url, folder, prefix):
 
     # Download image from <url> into a unique file path with <prefix>
 
-    path = os.path.join(folder, get_unique_name(prefix if prefix is not None else 'temp'))
+    path = os.path.join(folder, get_unique_name(prefix))
     urllib.request.urlretrieve(url, path)
 
-    # Append md5 digest to image file path
-
-    digest = get_hexdigest(path)
-    new_path = change_name_hash(path, digest)
-    os.rename(path, new_path)
-    return new_path, digest
+    return replace_uuid_with_digest(path)
 
 
 def get_hexdigest(path):
@@ -139,7 +137,7 @@ def get_hexdigest(path):
 def get_unique_name(prefix):
     """Return a unique name as prefix_uuid."""
 
-    prefix = '_'.join(prefix.split())
+    prefix = '_'.join(prefix.split()) if prefix is not None else 'temp'
     number = str(uuid.uuid4().hex)
     return prefix + '_' + number
 
@@ -154,6 +152,15 @@ def change_name_hash(name, digest):
 
 def get_name_hash(name):
     return name.split('_')[-1]
+
+
+def replace_uuid_with_digest(path):
+    """Replace uuid in path name with md5 digest"""
+
+    digest = get_hexdigest(path)
+    new_path = change_name_hash(path, digest)
+    os.rename(path, new_path)
+    return new_path, digest
 
 
 def make_name_dir(path, name):
@@ -327,6 +334,11 @@ option_parser.add_argument(
     help='directory of photos of the same person for training')
 
 option_parser.add_argument(
+    '--capture',
+    action='store_true',
+    help='use camera to capture live person face')
+
+option_parser.add_argument(
     '--term',
     type=str,
     help='search term of photos which will be used for face matching')
@@ -340,6 +352,16 @@ option_parser.add_argument(
     '--match',
     type=str,
     help='path or url of photos on which face matching will perform')
+
+option_parser.add_argument(
+    '--camera',
+    action='store_true',
+    help='use camera live video to perform face matching')
+
+option_parser.add_argument(
+    '--video',
+    type=str,
+    help='path of a video file on which face matching will perform')
 
 option_parser.add_argument(
     '--batch',
@@ -495,8 +517,7 @@ def analyse_face_features(name, img_dir_path, data, model, encode_file, hasdiges
     save_data(data, encode_file)
 
 
-def recognise_faces(rgb, data, name):
-    candidate_encodings, candidate_names, cnt_dict = flatten_encodings(data)
+def recognise_faces(rgb, name, candidate_encodings, candidate_names, cnt_dict):
     print("\n        Detecting faces in the image ...")
     boxes = detect_faces(rgb)
     cnt = len(boxes)
@@ -585,7 +606,7 @@ def check_key(default_key_file, key_file=None, search_term='cat'):
 
     And a Bing search API subscription key is needed.
 
-    A 30-days free trail Azure account can be created at:
+    A 7-days free trail Azure account can be created at:
 
         https://azure.microsoft.com/en-us/try/cognitive-services/?api=search-api-v7
 
@@ -687,3 +708,89 @@ def interact_get_match_photos(term, img_download_path, default_key_file, key_fil
             urls = get_url_path_list(ask_for_input("Then please type in path or URL of the photo:"))
 
     return urls, term, img_download_path
+
+
+# ----------------------------------------------------------------------
+# Video
+# ----------------------------------------------------------------------
+
+class VideoStream:
+    def __init__(self, src=0, transform=None):
+        self.src = src  # Indicate camera if it is a number otherwise file if a string
+        self.stream = cv.VideoCapture(self.src)  # Camera
+
+        self.transform = transform  # Transformation after getting the frame
+
+        self.queue = Queue(maxsize=100)  # Frames buffer
+
+        self.thread = Thread(target=self.update, args=())  # Thread for polling the next frame from camera
+        # self.thread.daemon = True  # Set thread as daemon so that no need to explicitly stop before exit the program
+
+        self.stopped = False  # Indicate whether need to stop polling the next frame
+
+    def start(self):
+        self.thread.start()
+        return self
+
+    def stop(self):
+        self.stopped = True
+        self.thread.join()
+
+    def running(self):
+        return not self.stopped
+
+    def read(self):
+        if not self.stopped:
+            frame = self.queue.get()  # Note queue.get() is a blocking operation
+            if isinstance(self.src, int):
+                while not self.queue.empty():
+                    frame = self.queue.get()
+            return frame
+        else:
+            return None
+
+    def update(self):
+        """Update """
+        while True:
+            if self.stopped:
+                self.stream.release()
+                return
+
+            if not self.queue.full():
+                grabbed, frame = self.stream.read()
+
+                if not grabbed:
+                    self.stopped = True
+
+                if self.transform:
+                    frame = self.transform(frame)
+
+                self.queue.put(frame)
+            else:
+                time.sleep(0.1)
+
+
+def interact_capture_photos(name, number, img_dir_path):
+    print("\n    {} photos need to be taken.".format(number))
+    print("\nPlease type space to capture a photo of '{}' or 'q' to stop.".format(name))
+    video = VideoStream(0).start()
+    count = 0
+    while video.running():
+        frame = video.read()
+        cv.imshow("Capture photos", frame)
+        key = cv.waitKey(1) & 0xFF
+        if key == ord("q"):
+            break
+        if key == ord(" "):
+            path = os.path.join(img_dir_path, get_unique_name(name)) + ".png"
+            cv.imwrite(path, frame)
+            path, _ = replace_uuid_with_digest(path)
+            print("\n    [{}/{}]  The photo is saved into".format(str(count + 1).zfill(2), number))
+            print("        {}".format(path))
+            count += 1
+            if count == number:
+                break
+            time.sleep(1)
+
+    cv.destroyAllWindows()
+    video.stop()
