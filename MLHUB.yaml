@@ -6,7 +6,7 @@ meta:
   version   : 0.4.0
   keywords  : face recognition, python3, computer vision
   license   : gpl3
-  display   : demo
+  display   : demo, score
   url       : https://github.com/simonzhaoms/facematch
 dependencies:
   system: cmake
