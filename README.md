@@ -20,6 +20,18 @@ https://github.com/simonzhaoms/facematch
   $ ml demo      facematch
   ```
 
+* To recognise an arbitrary person who can be found in the Internet,
+  you can just type:
+  
+  ```console
+  $ ml score facematch
+  ```
+
+  It will use Microsoft Bing image search API to search a person's
+  photo you want to recognise.  In order to use the API, you must have
+  a subcription key.  A 7-days free account can be created at
+  https://azure.microsoft.com/en-us/try/cognitive-services/?api=search-api-v7
+
 * To match you in camera:
 
   ```console
@@ -28,7 +40,8 @@ https://github.com/simonzhaoms/facematch
 
   It will open your camera to capture 5 photos of you to generate your
   face database, then recognise you in a live camera video.
-  
+
+
 * You can also provide the path or URL of a person's photos via option
   `--data`, and let facematch to recognise him/her in a photo via the
   option `--match`:
