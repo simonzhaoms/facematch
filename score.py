@@ -16,7 +16,6 @@ from utils import (
     encode_faces,
     flatten_encodings,
     get_url_path_list,
-    get_unique_name,
     interact_capture_photos,
     interact_get_match_photos,
     interact_search_for,
@@ -28,7 +27,6 @@ from utils import (
     mark_face,
     option_parser,
     recognise_faces,
-    replace_uuid_with_digest,
     show_image,
     stop,
 )
