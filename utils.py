@@ -31,7 +31,7 @@ from threading import Thread
 MARK_COLOR = (0, 255, 0)  # Green
 MARK_WIDTH = 4
 TEXT_COLOR = MARK_COLOR
-TEXT_WIDTH = 2
+LINE_WIDTH = 2
 TEXT_FONT = cv.FONT_HERSHEY_SIMPLEX
 TEXT_SIZE = 0.75
 
@@ -470,10 +470,24 @@ def mark_face(image, face, text):
 
     # Draw a rectangle around the faces
 
+    (textwidth, textheight), baseline = cv.getTextSize(text, TEXT_FONT, TEXT_SIZE, LINE_WIDTH)
     top, right, bottom, left = face
+    imgheight, imgwidth, _ = image.shape
+
+    y = top - baseline
+    if y < textheight:
+        y = bottom + textheight
+        if y + baseline > imgheight:
+            y = top + textheight
+
+    x = int(left + (right - left - textwidth)/2)
+    if x < 0:
+        x = 0
+    elif x + textwidth > imgwidth:
+        x = imgwidth - textwidth
+
     cv.rectangle(image, (left, top), (right, bottom), MARK_COLOR, MARK_WIDTH)
-    y = top - 15 if top - 15 > 15 else top + 15
-    cv.putText(image, text, (left, y), TEXT_FONT, TEXT_SIZE, TEXT_COLOR, TEXT_WIDTH)
+    cv.putText(image, text, (x, y), TEXT_FONT, TEXT_SIZE, TEXT_COLOR, LINE_WIDTH)
 
 
 def update_face_database(data, name, digest, encodings):
