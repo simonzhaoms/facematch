@@ -1,7 +1,6 @@
 import argparse
 import cv2 as cv
 import face_recognition
-import getpass
 import hashlib
 import json
 import matplotlib.pyplot as plt
@@ -12,8 +11,10 @@ import pickle
 import re
 import readline  # Don't remove !! For prompt of input() to take effect
 import sys
+import termios
 import time
 import toolz
+import tty
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -200,6 +201,39 @@ def get_url_path_list(url):
 def stop(msg, status=0):
     print(msg)
     sys.exit(status)
+
+
+def getpass(prompt=None):
+    symbol = "`~!@#$%^&*()-_=+[{]}\\|;:'\",<.>/?"
+    if prompt:
+        sys.stdout.write(prompt)
+        sys.stdout.flush()
+
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    chars = []
+    try:
+        tty.setraw(sys.stdin.fileno())
+        while True:
+            c = sys.stdin.read(1)
+            if c in '\n\r':  # Enter.
+                break
+            if c == '\003':
+                raise KeyboardInterrupt
+            if c == '\x7f':  # Backspace.
+                if chars:
+                    sys.stdout.write('\b \b')
+                    sys.stdout.flush()
+                    del chars[-1]
+                continue
+            if c.isalnum() or c in symbol:
+                sys.stdout.write('*')
+                sys.stdout.flush()
+                chars.append(c)
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        sys.stdout.write('\n')
+    return ''.join(chars)
 
 
 # ----------------------------------------------------------------------
@@ -655,7 +689,7 @@ def check_key(default_key_file, key_file=None, search_term='cat'):
         print(msg)
         msg = "> "
         while key is None:
-            key = getpass.getpass(msg)
+            key = getpass(msg)
             try:
                 img_urls, total_img_num = search_images(search_term, key)
                 save_key(key, default_key_file)
